@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "check": "node --check index.js && node --check src/database.js && node --check src/ticketSystem.js && node --check commandAccess.js"
   },
   "dependencies": {
