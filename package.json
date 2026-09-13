@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check src/database.js && node --check src/ticketSystem.js && node --check commandAccess.js"
+    "check": "node --check index.js && node --check src/database.js && node --check src/ticketSystem.js && node --check src/moderation.js && node --check src/casino.js && node --check src/announcement.js && node --check src/voicePanel.js && node --check src/economy.js && node --check src/games.js && node --check src/roblox.js"
   },
   "dependencies": {
     "discord.js": "^14.25.1",
