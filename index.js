@@ -18,21 +18,26 @@ const commands = [
 		.addSubcommand(subcommand => subcommand.setName("panel").setDescription("Destek panelini gönder"))
 ].map(command => command.toJSON());
 
-async function registerCommands() {
-	if (!process.env.CLIENT_ID || !process.env.DISCORD_TOKEN) {
-		throw new Error("CLIENT_ID ve DISCORD_TOKEN .env içinde tanımlanmalıdır.");
+async function registerCommands(applicationId) {
+	if (!process.env.DISCORD_TOKEN) {
+		throw new Error("DISCORD_TOKEN ortam değişkeninde tanımlı değil.");
 	}
 
 	const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 	const route = process.env.GUILD_ID
-		? Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
-		: Routes.applicationCommands(process.env.CLIENT_ID);
+		? Routes.applicationGuildCommands(applicationId, process.env.GUILD_ID)
+		: Routes.applicationCommands(applicationId);
 	await rest.put(route, { body: commands });
 }
 
 client.once("ready", async readyClient => {
-	await registerCommands();
-	console.log(`${readyClient.user.tag} olarak giriş yapıldı.`);
+	try {
+		await registerCommands(process.env.CLIENT_ID || readyClient.application.id);
+		console.log(`${readyClient.user.tag} olarak giriş yapıldı.`);
+	} catch (error) {
+		console.error("Slash komutları kaydedilemedi:", error);
+		await readyClient.destroy();
+	}
 });
 
 client.on("interactionCreate", async interaction => {
@@ -72,6 +77,7 @@ client.on("interactionCreate", async interaction => {
 
 if (!process.env.DISCORD_TOKEN) {
 	console.error("DISCORD_TOKEN .env içinde tanımlı değil.");
+	process.exitCode = 1;
 } else {
 	client.login(process.env.DISCORD_TOKEN);
 }
