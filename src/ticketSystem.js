@@ -235,22 +235,12 @@ async function handleTicketButton(interaction) {
     await interaction.channel.delete("Ticket silindi");
 }
 
-function isWhitelisted(member, guildId) {
-    return memberHasConfiguredRole(member, getGuildSettings(guildId).whitelistRoleIds);
-}
-
-function isVanderlinde(member, guildId) {
-    return memberHasConfiguredRole(member, getGuildSettings(guildId).vanderlindeRoleIds);
-}
-
 module.exports = {
     openSetupModal,
     saveSetupModal,
     sendSupportPanel,
     createTicket,
     handleTicketButton,
-    isWhitelisted,
-    isVanderlinde,
     categories,
     PANEL_IMAGE_URL,
     PANEL_LOGO_URL

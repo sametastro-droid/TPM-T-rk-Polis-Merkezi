@@ -13,9 +13,7 @@ function asRoleIdArray(value) {
 
 function defaultSettings() {
 	return {
-		supportRoles: { transfer: [], gamepass: [], discord: [], oyunIci: [] },
-		whitelistRoleIds: asRoleIdArray(process.env.WHITELIST_ROLE_IDS),
-		vanderlindeRoleIds: asRoleIdArray(process.env.VANDERLINDE_ROLE_IDS)
+		supportRoles: { transfer: [], gamepass: [], discord: [], oyunIci: [] }
 	};
 }
 
@@ -31,9 +29,6 @@ function normalizeSettings(raw = {}) {
 	settings.supportRoles.gamepass = asRoleIdArray(firstDefined(rawSupportRoles.gamepass, raw.gamepassSupportRoles, raw.gamepassSupportRole, raw.gamepassRoleId));
 	settings.supportRoles.discord = asRoleIdArray(firstDefined(rawSupportRoles.discord, raw.discordSupportRoles, raw.discordSupportRole, raw.discordRoleId));
 	settings.supportRoles.oyunIci = asRoleIdArray(firstDefined(rawSupportRoles.oyunIci, raw.oyunIciSupportRoles, raw.oyunIciSupportRole, raw.oyunIciRoleId, raw.oyunDestekRole));
-	settings.whitelistRoleIds = asRoleIdArray(firstDefined(raw.whitelistRoleIds, process.env.WHITELIST_ROLE_IDS));
-	settings.vanderlindeRoleIds = asRoleIdArray(firstDefined(raw.vanderlindeRoleIds, process.env.VANDERLINDE_ROLE_IDS));
-
 	return settings;
 }
 
