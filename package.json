@@ -4,9 +4,10 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "check": "node --check commandAccess.js"
+    "check": "node --check index.js && node --check src/database.js && node --check src/ticketSystem.js && node --check commandAccess.js"
   },
   "dependencies": {
-    "discord.js": "^14.25.1"
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.6.1"
   }
 }
