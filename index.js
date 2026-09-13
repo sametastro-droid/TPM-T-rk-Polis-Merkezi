@@ -24,10 +24,21 @@ async function registerCommands(applicationId) {
 	}
 
 	const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
-	const route = process.env.GUILD_ID
-		? Routes.applicationGuildCommands(applicationId, process.env.GUILD_ID)
-		: Routes.applicationCommands(applicationId);
-	await rest.put(route, { body: commands });
+	const globalRoute = Routes.applicationCommands(applicationId);
+
+	// Önceden farklı kapsamda kaydedilmiş eski bot komutlarını temizle.
+	await rest.put(globalRoute, { body: [] });
+
+	for (const guild of client.guilds.cache.values()) {
+		await rest.put(Routes.applicationGuildCommands(applicationId, guild.id), { body: [] });
+	}
+
+	if (process.env.GUILD_ID) {
+		await rest.put(Routes.applicationGuildCommands(applicationId, process.env.GUILD_ID), { body: commands });
+		return;
+	}
+
+	await rest.put(globalRoute, { body: commands });
 }
 
 client.once("ready", async readyClient => {
