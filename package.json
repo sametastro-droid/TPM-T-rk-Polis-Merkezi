@@ -1,0 +1,12 @@
+{
+  "name": "tpm-turk-polis-merkezi",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "check": "node --check commandAccess.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1"
+  }
+}
