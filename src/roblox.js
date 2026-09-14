@@ -5,12 +5,15 @@ const {
     SlashCommandBuilder
 } = require("discord.js");
 const { getGuildSettings, updateGuildSettings } = require("./database");
+const { sendLog } = require("./logging");
 
-const GROUP_ID = process.env.ROBLOX_GROUP_ID || "702534805";
-const AUTHORIZED_DISCORD_ROLES = (process.env.ROBLOX_AUTHORIZED_ROLE_IDS || "1547556322533449769,1547556251297255524")
-    .split(",")
-    .map(value => value.trim())
-    .filter(Boolean);
+const GROUP_ID = "702534805";
+const ROBLOX_API_URL = "https://groups.roblox.com";
+const AUTHORIZED_DISCORD_ROLES = [
+    "1547556322533449769",
+    "1547556251297255524"
+];
+const MIN_MANAGED_RANK = 15;
 const VERIFICATION_TTL = 15 * 60 * 1000;
 
 const commands = [
@@ -52,7 +55,8 @@ for (const commandName of ["terfi", "tenzil"]) {
         .addStringOption(option => option
             .setName("kullanici")
             .setDescription("Roblox kullanıcı adı.")
-            .setRequired(true))
+            .setRequired(true)
+            .setAutocomplete(true))
         .addStringOption(option => option
             .setName("rutbe")
             .setDescription("Hedef rütbe.")
@@ -86,8 +90,20 @@ async function getProfile(userId) {
 }
 
 async function getRoles() {
-    const data = await requestJson(`https://groups.roblox.com/v1/groups/${GROUP_ID}/roles`);
+    const data = await requestJson(`${ROBLOX_API_URL}/v1/groups/${GROUP_ID}/roles`);
     return (data.roles || []).filter(role => role.rank > 0).sort((first, second) => first.rank - second.rank);
+}
+
+async function getGroupMembers(keyword) {
+    if (!keyword || keyword.trim().length < 2) return [];
+    const user = await getUser(keyword.trim());
+    if (!user || !(await getUserRole(user.id))) return [];
+    return [user];
+}
+
+async function getUserById(userId) {
+    const data = await requestJson(`https://users.roblox.com/v1/users/${userId}`);
+    return data?.id ? { id: data.id, name: data.name } : null;
 }
 
 async function getUserRole(userId) {
@@ -97,19 +113,24 @@ async function getUserRole(userId) {
 }
 
 async function setRole(userId, roleId) {
-    const endpoint = process.env.ROBLOX_ROLE_UPDATE_URL;
-    const apiKey = process.env.ROBLOX_API_KEY;
-    if (!endpoint && !apiKey) return { success: false, message: "Roblox rütbe API bağlantısı kurulmamış. ROBLOX_ROLE_UPDATE_URL ve ROBLOX_API_KEY ayarlanmalı." };
-    if (!endpoint) return { success: false, message: "ROBLOX_ROLE_UPDATE_URL eksik. Rütbe değiştirecek API adresini ayarla." };
-    if (!apiKey) return { success: false, message: "ROBLOX_API_KEY eksik. Roblox Open Cloud API anahtarını ayarla." };
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey
-        },
-        body: JSON.stringify({ groupId: GROUP_ID, userId, roleId })
+    const cookie = process.env.ROBLOX_COOKIE?.trim();
+    if (!cookie) return { success: false, message: "ROBLOX_COOKIE yerel .env dosyasında ayarlanmadı." };
+    const cookieHeader = cookie.startsWith(".ROBLOSECURITY=") ? cookie : `.ROBLOSECURITY=${cookie}`;
+    const endpoint = `${ROBLOX_API_URL}/v1/groups/${GROUP_ID}/users/${userId}`;
+    const headers = { "Content-Type": "application/json", Cookie: cookieHeader };
+    let response = await fetch(endpoint, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ roleId })
     });
+    const csrfToken = response.headers.get("x-csrf-token");
+    if (response.status === 403 && csrfToken) {
+        response = await fetch(endpoint, {
+            method: "PATCH",
+            headers: { ...headers, "x-csrf-token": csrfToken },
+            body: JSON.stringify({ roleId })
+        });
+    }
     if (!response.ok) return { success: false, message: `Roblox rütbe API hatası: ${response.status}` };
     return { success: true };
 }
@@ -123,17 +144,37 @@ function isDiscordAuthorized(interaction) {
 }
 
 function roleLabel(role) {
-    return `[${role.rank}] ${role.name}`;
+    return role.name;
 }
 
 async function roleAutocomplete(interaction) {
-    const current = (interaction.options.getString("rutbe") || "").toLocaleLowerCase("tr-TR");
+    const focused = interaction.options.getFocused(true);
+    const current = String(focused.value || "").toLocaleLowerCase("tr-TR");
     try {
+        if (focused.name === "kullanici") {
+            const members = await getGroupMembers(String(focused.value || ""));
+            await interaction.respond(members.slice(0, 25).map(member => ({ name: member.name, value: `user:${member.id}` })));
+            return;
+        }
         const roles = await getRoles();
-        await interaction.respond(roles
+        const settings = settingsFor(interaction.guildId);
+        const verified = settings.roblox.verifiedUsers[interaction.user.id];
+        const targetInput = interaction.options.getString("kullanici");
+        let targetRole = null;
+        if (targetInput) {
+            const targetValue = targetInput.replace(/^user:/, "");
+            const target = /^\d+$/.test(targetValue) ? await getUserById(targetValue) : await getUser(targetValue);
+            if (target) targetRole = await getUserRole(target.id);
+        }
+        const maximumRank = verified?.rank ?? Number.MAX_SAFE_INTEGER;
+        const commandName = interaction.commandName;
+        const availableRoles = roles
+            .filter(role => role.rank < maximumRank)
+            .filter(role => targetRole && (commandName === "terfi" ? role.rank > targetRole.rank : role.rank < targetRole.rank && role.rank >= MIN_MANAGED_RANK))
             .filter(role => roleLabel(role).toLocaleLowerCase("tr-TR").includes(current))
-            .slice(0, 25)
-            .map(role => ({ name: roleLabel(role), value: String(role.id) })));
+            .sort((first, second) => commandName === "terfi" ? first.rank - second.rank : second.rank - first.rank)
+            .slice(0, 25);
+        await interaction.respond(availableRoles.map(role => ({ name: `${roleLabel(role)} (rütbe ${role.rank})`.slice(0, 100), value: `role:${role.id}` })));
     } catch (error) {
         console.error("Roblox rütbe otomatik tamamlama hatası:", error.message);
         await interaction.respond([]).catch(() => undefined);
@@ -217,23 +258,39 @@ async function handleRankChange(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const actorRole = await getUserRole(actor.userId);
     if (!actorRole) return interaction.editReply("Doğrulanmış Roblox hesabın grupta bulunamadı.");
-    const target = await getUser(interaction.options.getString("kullanici"));
+    const targetInput = interaction.options.getString("kullanici");
+    const targetValue = targetInput.replace(/^user:/, "");
+    const target = /^\d+$/.test(targetValue) ? await getUserById(targetValue) : await getUser(targetValue);
     if (!target) return interaction.editReply("Roblox kullanıcısı bulunamadı.");
     if (String(target.id) === String(actor.userId)) return interaction.editReply("Kendi hesabına terfi veya tenzil veremezsin.");
 
     const roles = await getRoles();
-    const targetRole = roles.find(role => String(role.id) === interaction.options.getString("rutbe"));
+    const targetRoleId = interaction.options.getString("rutbe").replace(/^role:/, "");
+    const targetRole = roles.find(role => String(role.id) === targetRoleId);
     if (!targetRole) return interaction.editReply("Geçersiz rütbe.");
     const currentRole = await getUserRole(target.id);
     if (!currentRole) return interaction.editReply("Hedef kullanıcı bu grupta bulunmuyor.");
-    if (targetRole.rank >= actorRole.rank) return interaction.editReply("Kendi rütbene eşit veya üstündeki bir rütbeyi veremezsin.");
+    if (targetRole.rank >= actorRole.rank) return interaction.editReply("Kendi rütbene eşit veya üstündeki rütbeyi veremezsin.");
 
     const commandName = interaction.commandName;
-    if (commandName === "terfi" && targetRole.rank <= currentRole.rank) return interaction.editReply("Terfi rütbesi mevcut rütbeden yüksek olmalı.");
-    if (commandName === "tenzil" && targetRole.rank >= currentRole.rank) return interaction.editReply("Tenzil rütbesi mevcut rütbeden düşük olmalı.");
+    const isPromotion = commandName === "terfi";
+    const isDemotion = commandName === "tenzil";
+    const nextRanks = roles
+        .map(role => role.rank)
+        .filter(rank => isPromotion ? rank > currentRole.rank : rank < currentRole.rank && rank >= MIN_MANAGED_RANK);
+    const nextRank = nextRanks.length ? (isPromotion ? Math.min(...nextRanks) : Math.max(...nextRanks)) : null;
+    if (nextRank === null) return interaction.editReply(`${isPromotion ? "Terfi" : "Tenzil"} için sıradaki tanımlı rütbe bulunamadı.`);
+    if (targetRole.rank !== nextRank) return interaction.editReply(`${isPromotion ? "Terfi" : "Tenzil"} yalnızca mevcut rütbenin hemen ${isPromotion ? "üstündeki" : "altındaki"} kademeye yapılabilir.`);
 
     const result = await setRole(target.id, targetRole.id);
     if (!result.success) return interaction.editReply(`Rütbe değiştirilemedi. ${result.message}`);
+    await sendLog(interaction.guild, "rank", `${isPromotion ? "Terfi" : "Tenzil"} işlemi`, [
+        { name: "İşlemi yapan", value: `${interaction.user} (${interaction.user.tag})` },
+        { name: "Rütbe alan", value: `${target.name} (${target.id})` },
+        { name: "Yetkilinin mevcut rütbesi", value: `${roleLabel(actorRole)} (${actorRole.rank})` },
+        { name: "Eski rütbe", value: `${roleLabel(currentRole)} (${currentRole.rank})` },
+        { name: "Yeni rütbe", value: `${roleLabel(targetRole)} (${targetRole.rank})` }
+    ], isPromotion ? 0x2ecc71 : 0xe67e22);
     return interaction.editReply(`**${target.name}** kullanıcısının rütbesi **${roleLabel(currentRole)}** → **${roleLabel(targetRole)}** olarak değiştirildi.`);
 }
 

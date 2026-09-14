@@ -4,6 +4,7 @@ const {
     PermissionFlagsBits,
     SlashCommandBuilder
 } = require("discord.js");
+const { sendLog } = require("./logging");
 
 const durations = {
     "1 saat": 60 * 60 * 1000,
@@ -52,6 +53,14 @@ function mentionEvidence(attachment) {
 }
 function getReason(interaction) {
     return `${interaction.options.getString("sebep")} | İşlemi yapan: ${interaction.user.tag}`;
+}
+async function logModeration(interaction, target, details, color = 0xe74c3c) {
+    await sendLog(interaction.guild, "moderation", `Moderasyon: ${interaction.commandName}`, [
+        { name: "İşlemi yapan", value: `${interaction.user} (${interaction.user.tag})` },
+        { name: "Hedef", value: target || "Belirtilmedi" },
+        { name: "Detay", value: details },
+        { name: "Sebep", value: interaction.options.getString("sebep") || "Belirtilmedi" }
+    ], color);
 }
 async function getTarget(interaction) {
     const target = interaction.options.getUser("kullanici");
@@ -104,6 +113,7 @@ async function handleModeration(interaction) {
             ? await banEverywhere(interaction.client, target.id, reason, duration)
             : await banEverywhere({ guilds: new Map([[interaction.guildId, interaction.guild]]) }, target.id, reason, duration);
         await interaction.reply({ content: `${target.tag} için ${result.success} sunucuda yasaklama uygulandı.${result.failed ? ` ${result.failed} sunucuda uygulanamadı.` : ""}` });
+        await logModeration(interaction, `${target} (${target.id})`, `${result.success} sunucuda uygulandı, ${result.failed} sunucuda başarısız. Süre: ${interaction.options.getString("sure")}`);
         return;
     }
 
@@ -111,6 +121,7 @@ async function handleModeration(interaction) {
         const targetId = interaction.options.getString("kullanici-id");
         await interaction.guild.bans.remove(targetId, reason);
         await interaction.reply({ content: `${targetId} kullanıcısının yasağı kaldırıldı.` });
+        await logModeration(interaction, targetId, "Yasak kaldırıldı.", 0x2ecc71);
         return;
     }
 
@@ -118,6 +129,7 @@ async function handleModeration(interaction) {
         const target = await getTarget(interaction);
         await interaction.guild.members.kick(target.id, reason);
         await interaction.reply({ content: `${target.tag} sunucudan çıkarıldı.` });
+        await logModeration(interaction, `${target} (${target.id})`, "Kullanıcı sunucudan atıldı.");
         return;
     }
 
@@ -125,6 +137,7 @@ async function handleModeration(interaction) {
         const target = await getTarget(interaction);
         await interaction.guild.members.timeout(target.id, parseDuration(interaction.options.getString("sure")), reason);
         await interaction.reply({ content: `${target.tag} susturuldu.` });
+        await logModeration(interaction, `${target} (${target.id})`, `Süre: ${interaction.options.getString("sure")}`);
         return;
     }
 
@@ -132,12 +145,14 @@ async function handleModeration(interaction) {
         const target = await getTarget(interaction);
         await interaction.guild.members.timeout(target.id, null, reason);
         await interaction.reply({ content: `${target.tag} kullanıcısının susturması kaldırıldı.` });
+        await logModeration(interaction, `${target} (${target.id})`, "Susturma kaldırıldı.", 0x2ecc71);
         return;
     }
 
     if (name === "temizle") {
         const messages = await interaction.channel.bulkDelete(interaction.options.getInteger("adet"), true);
         await interaction.reply({ content: `${messages.size} mesaj silindi.`, flags: MessageFlags.Ephemeral });
+        await logModeration(interaction, interaction.channel, `${messages.size} mesaj silindi.`, 0xe67e22);
         return;
     }
 
@@ -148,6 +163,7 @@ async function handleModeration(interaction) {
             await ordered[index].setPosition(ordered.length - index, { reason: "Roller ters çevrildi" });
         }
         await interaction.reply({ content: "Roller ters sıraya çevrildi." });
+        await logModeration(interaction, interaction.guild.name, "Sunucu rolleri ters sıraya çevrildi.", 0xe67e22);
         return;
     }
 
@@ -158,6 +174,7 @@ async function handleModeration(interaction) {
             await interaction.guild.bans.remove(ban.user.id, reason).then(() => { removed += 1; }).catch(() => undefined);
         }
         await interaction.reply({ content: `${removed} yasağın kaldırılması tamamlandı.` });
+        await logModeration(interaction, interaction.guild.name, `${removed} yasak kaldırıldı.`, 0x2ecc71);
     }
 }
 

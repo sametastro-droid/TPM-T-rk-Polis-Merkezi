@@ -11,6 +11,7 @@ const {
     StringSelectMenuBuilder
 } = require("discord.js");
 const { categoryKeys, getGuildSettings, saveGuildSettings, updateGuildSettings } = require("./database");
+const { sendLog } = require("./logging");
 
 const PANEL_IMAGE_URL = "https://cdn.discordapp.com/attachments/1547556640817938463/1548627516590129242/IMG_3745_1.jpg?ex=6aa7bf44&is=6aa66dc4&hm=681e00096461a8e377a29ac0c3330484b4d46826f706347003deb93ae95c8ba8&";
 const categories = {
@@ -163,6 +164,12 @@ async function createTicket(interaction) {
     );
     await channel.send({ content: roleIds.map(roleId => `<@&${roleId}>`).join(" "), embeds: [embed], components: [ticketButtons()], allowedMentions: { roles: roleIds, users: [interaction.user.id] } });
     await interaction.reply({ content: `Biletiniz oluşturuldu: ${channel}`, flags: MessageFlags.Ephemeral });
+    await sendLog(interaction.guild, "ticket", "Bilet açıldı", [
+        { name: "Bileti açan", value: `${interaction.user} (${interaction.user.tag})` },
+        { name: "Bilet sahibi", value: `<@${interaction.user.id}>` },
+        { name: "Kategori", value: category.label },
+        { name: "Kanal", value: `${channel} (${channel.id})` }
+    ], 0x2ecc71);
 }
 
 async function userInformation(interaction, record) {
@@ -187,10 +194,22 @@ async function handleTicketButton(interaction) {
     if (action === "close-confirm") {
         await interaction.channel.permissionOverwrites.edit(record.ownerId, { SendMessages: false });
         updateGuildSettings(interaction.guildId, current => ({ ...current, openTickets: { ...current.openTickets, [interaction.channelId]: { ...record, status: "closed" } } }));
+        await sendLog(interaction.guild, "ticket", "Bilet kapatıldı", [
+            { name: "Kapatan", value: `${interaction.user} (${interaction.user.tag})` },
+            { name: "Bilet sahibi", value: `<@${record.ownerId}>` },
+            { name: "Kategori", value: categories[record.categoryKey].label },
+            { name: "Kanal ID", value: interaction.channelId }
+        ], 0xe67e22);
         return interaction.update({ content: "Bilet kapatıldı.", components: [] });
     }
     if (action === "delete-confirm") {
         updateGuildSettings(interaction.guildId, current => { const openTickets = { ...current.openTickets }; delete openTickets[interaction.channelId]; return { ...current, openTickets }; });
+        await sendLog(interaction.guild, "ticket", "Bilet silindi", [
+            { name: "Silen", value: `${interaction.user} (${interaction.user.tag})` },
+            { name: "Bilet sahibi", value: `<@${record.ownerId}>` },
+            { name: "Kategori", value: categories[record.categoryKey].label },
+            { name: "Kanal ID", value: interaction.channelId }
+        ], 0xe74c3c);
         await interaction.update({ content: "Bilet siliniyor.", components: [] });
         await interaction.channel.delete("Bilet silindi");
     }
