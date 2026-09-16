@@ -16,8 +16,18 @@ const voicePanel = require("./src/voicePanel");
 const economy = require("./src/economy");
 const games = require("./src/games");
 const roblox = require("./src/roblox");
+const messageCreateEvent = require("./src/events/messageCreate"); // 1. Otomatik cevap modülünü çağırdık
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates] });
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.GuildMembers, 
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.MessageContent // 2. Mesaj okuma izni eklendi
+    ] 
+});
+
 const supportCommand = new SlashCommandBuilder()
     .setName("destek")
     .setDescription("Destek sistemi yönetimi")
@@ -159,8 +169,10 @@ client.on("interactionCreate", async interaction => {
     }
 });
 
-client.on("messageCreate", message => {
-    games.handleGameMessage(message).catch(error => console.error("Oyun mesajı işlenemedi:", error));
+// 3. Otomatik cevap ve oyun mesajı dinleyicileri birleştirildi
+client.on("messageCreate", async message => {
+    await messageCreateEvent.execute(message).catch(error => console.error("Otomatik cevap işlenemedi:", error));
+    await games.handleGameMessage(message).catch(error => console.error("Oyun mesajı işlenemedi:", error));
 });
 
 if (!process.env.DISCORD_TOKEN) {
@@ -172,3 +184,4 @@ if (!process.env.DISCORD_TOKEN) {
         process.exitCode = 1;
     });
 }
+
