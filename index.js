@@ -16,7 +16,7 @@ const voicePanel = require("./src/voicePanel");
 const economy = require("./src/economy");
 const games = require("./src/games");
 const roblox = require("./src/roblox");
-const messageCreateEvent = require("./src/events/messageCreate"); // 1. Otomatik cevap modülünü çağırdık
+const messageCreateEvent = require("./src/events/messageCreate"); // src/events/messageCreate.js çağrıldı
 
 const client = new Client({ 
     intents: [
@@ -24,7 +24,7 @@ const client = new Client({
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.GuildMembers, 
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.MessageContent // 2. Mesaj okuma izni eklendi
+        GatewayIntentBits.MessageContent // Mesaj okuma izni eklendi
     ] 
 });
 
@@ -169,7 +169,7 @@ client.on("interactionCreate", async interaction => {
     }
 });
 
-// 3. Otomatik cevap ve oyun mesajı dinleyicileri birleştirildi
+// Hem otomatik cevaplar hem oyunlar bağımsız çalışır
 client.on("messageCreate", async message => {
     await messageCreateEvent.execute(message).catch(error => console.error("Otomatik cevap işlenemedi:", error));
     await games.handleGameMessage(message).catch(error => console.error("Oyun mesajı işlenemedi:", error));
@@ -184,4 +184,3 @@ if (!process.env.DISCORD_TOKEN) {
         process.exitCode = 1;
     });
 }
-
