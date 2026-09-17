@@ -156,9 +156,14 @@ async function roleAutocomplete(interaction) {
             await interaction.respond(members.slice(0, 25).map(member => ({ name: member.name, value: `user:${member.id}` })));
             return;
         }
+
         const roles = await getRoles();
         const settings = settingsFor(interaction.guildId);
         const verified = settings.roblox.verifiedUsers[interaction.user.id];
+        
+        // İşlemi yapan yetkilinin rütbe sınırı
+        const actorMaxRank = verified?.rank ?? 0;
+
         const targetInput = interaction.options.getString("kullanici");
         let targetRole = null;
         if (targetInput) {
@@ -166,14 +171,27 @@ async function roleAutocomplete(interaction) {
             const target = /^\d+$/.test(targetValue) ? await getUserById(targetValue) : await getUser(targetValue);
             if (target) targetRole = await getUserRole(target.id);
         }
-        const maximumRank = verified?.rank ?? Number.MAX_SAFE_INTEGER;
+
         const commandName = interaction.commandName;
+
         const availableRoles = roles
-            .filter(role => role.rank < maximumRank)
-            .filter(role => targetRole && (commandName === "terfi" ? role.rank > targetRole.rank : role.rank < targetRole.rank && role.rank >= MIN_MANAGED_RANK))
+            // 1. Yetkilinin kendi rütbesinden DÜŞÜK rütbeler gösterilir
+            .filter(role => role.rank < actorMaxRank)
+            // 2. Terfi/Tenzil mantığına göre hedef kullanıcının rütbesiyle kıyaslanır
+            .filter(role => {
+                if (!targetRole) return true;
+                if (commandName === "terfi") {
+                    return role.rank > targetRole.rank;
+                } else {
+                    return role.rank < targetRole.rank;
+                }
+            })
+            // 3. İsim arama filtresi
             .filter(role => roleLabel(role).toLocaleLowerCase("tr-TR").includes(current))
+            // 4. Terfi ise küçükten büyüğe, tenzil ise büyükten küçüğe sırala
             .sort((first, second) => commandName === "terfi" ? first.rank - second.rank : second.rank - first.rank)
             .slice(0, 25);
+
         await interaction.respond(availableRoles.map(role => ({ name: `${roleLabel(role)} (rütbe ${role.rank})`.slice(0, 100), value: `role:${role.id}` })));
     } catch (error) {
         console.error("Roblox rütbe otomatik tamamlama hatası:", error.message);
@@ -264,23 +282,25 @@ async function handleRankChange(interaction) {
     if (!target) return interaction.editReply("Roblox kullanıcısı bulunamadı.");
     if (String(target.id) === String(actor.userId)) return interaction.editReply("Kendi hesabına terfi veya tenzil veremezsin.");
 
+    const currentRole = await getUserRole(target.id);
+    if (!currentRole) return interaction.editReply("Hedef kullanıcı bu grupta bulunmuyor.");
+
+    // Yetkili kendisiyle aynı veya kendisinden üst rütbedeki birisine işlem yapamaz
+    if (currentRole.rank >= actorRole.rank) {
+        return interaction.editReply("Kendi rütbene eşit veya senden üstte olan bir kullanıcıya terfi/tenzil işlemi uygulayamazsın.");
+    }
+
     const roles = await getRoles();
     const targetRoleId = interaction.options.getString("rutbe").replace(/^role:/, "");
     const targetRole = roles.find(role => String(role.id) === targetRoleId);
     if (!targetRole) return interaction.editReply("Geçersiz rütbe.");
-    const currentRole = await getUserRole(target.id);
-    if (!currentRole) return interaction.editReply("Hedef kullanıcı bu grupta bulunmuyor.");
-    if (targetRole.rank >= actorRole.rank) return interaction.editReply("Kendi rütbene eşit veya üstündeki rütbeyi veremezsin.");
+
+    if (targetRole.rank >= actorRole.rank) {
+        return interaction.editReply("Kendi rütbene eşit veya üstündeki bir rütbeyi veremezsin.");
+    }
 
     const commandName = interaction.commandName;
     const isPromotion = commandName === "terfi";
-    const isDemotion = commandName === "tenzil";
-    const nextRanks = roles
-        .map(role => role.rank)
-        .filter(rank => isPromotion ? rank > currentRole.rank : rank < currentRole.rank && rank >= MIN_MANAGED_RANK);
-    const nextRank = nextRanks.length ? (isPromotion ? Math.min(...nextRanks) : Math.max(...nextRanks)) : null;
-    if (nextRank === null) return interaction.editReply(`${isPromotion ? "Terfi" : "Tenzil"} için sıradaki tanımlı rütbe bulunamadı.`);
-    if (targetRole.rank !== nextRank) return interaction.editReply(`${isPromotion ? "Terfi" : "Tenzil"} yalnızca mevcut rütbenin hemen ${isPromotion ? "üstündeki" : "altındaki"} kademeye yapılabilir.`);
 
     const result = await setRole(target.id, targetRole.id);
     if (!result.success) return interaction.editReply(`Rütbe değiştirilemedi. ${result.message}`);
