@@ -44,7 +44,7 @@ module.exports = {
 
         const contentLower = message.content.trim().toLowerCase();
 
-        // Özel Kullanıcı Kontrolü (1 Saat Cooldown)
+        // Özel Kullanıcı Kontrolü
         if (message.author.id === SPECIAL_USER_ID) {
             const now = Date.now();
             if (now - specialUserLastGreeted >= SPECIAL_USER_COOLDOWN_MS) {
@@ -61,7 +61,7 @@ module.exports = {
                     content: `<@${message.author.id}> ${item.response}`,
                     allowedMentions: { users: [message.author.id] }
                 }).catch(() => undefined);
-                break;
+                return;
             }
         }
     }
